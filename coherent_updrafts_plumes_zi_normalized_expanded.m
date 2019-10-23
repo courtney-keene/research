@@ -3,13 +3,14 @@ close all
 clear all
 
 daysec=24*60*60; %number of seconds in a day
-load('~/Dropbox/MATLAB/Lidar_Codes/vert_vel_map'); %divergent colormap
+% load('~/Dropbox/MATLAB/Lidar_Codes/vert_vel_map'); %divergent colormap
 pflag=1; % flag to toggle plotting on/off on=1
 
 target_years={'2015' '2016'}; %select the year of data you want to process
 
 %% Load locally forced convection dates to consider
-test=dlmread('~/Dropbox/Shallow_to_Deep/Specturm_of_depths.csv','/'); %this list has various categories of convective development
+% test=dlmread('~/Dropbox/Shallow_to_Deep/Specturm_of_depths.csv','/'); %this list has various categories of convective development
+test=dlmread('spectrum_of_depths_sorted.csv','/'); %this list has various categories of convective development
 dates=datenum(test(:,3)+2000,test(:,1),test(:,2)); %convert to matlab time
 cudays_all=unique(dates); %make sure the list is unique
 
@@ -85,12 +86,14 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
         target_year=target_years{ty};
         
         %% load the lidar derived boundary layer horizontal wind profoile data (produced in "lidar_wind.m")
-        fin=strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/WINDS/','lidar_winds_',sites{ss},'.mat');
+%         fin=strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/WINDS/','lidar_winds_',sites{ss},'.mat');
+        fin=strcat('lidar_data/SGP_LIDAR_DATA/WINDS/','lidar_winds_',sites{ss},'.mat');
         load(fin,'wspdmaster','wdmaster','timemaster','hgts')
         whgts=hgts; clear hgts; %rename some of the variables
         
         %% list the Lidar vertical velocity and backscatter data files
-        dirstr=strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/RAW_DATA/',sites{ss},'/','*.cdf');
+%         dirstr=strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/RAW_DATA/',sites{ss},'/','*.cdf');
+        dirstr=strcat('lidar_data/SGP_LIDAR_DATA/RAW_DATA/',sites{ss},'/','*.cdf');
         files=dir(dirstr);
         
         %% idealized vectors for use later in compositing
@@ -112,13 +115,15 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
         %% load lidar derived CBL heights and Wstar values-> these can be useful for identifying when clouds are near the top of the CBL
         
         if ss==5
-            load('~/Dropbox/MATLAB/SGP_LIDAR_CODES/C1_2011_2017_CBLH');
+%             load('~/Dropbox/MATLAB/SGP_LIDAR_CODES/C1_2011_2018_CBLH');
+            load('C1_2011_2018_CBLH');
             timevec2=Time_all; %rename the time vector for the CBLH heights and Wstar data
             CBLH=Zi_all; %rename the Convective Boundary Layer height (Zi)
             WSTAR=Wstar_all; %rename the wstar data
             CBLH(abs(gradient(CBLH))>700)=nan; %eliminate large jumps in the CBL depth (spurious features)
         else
-            load(strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/EXTEND_WSTATS_VAP/',sites{ss},'_CBLH.mat'));
+%             load(strcat('/Volumes/My Passport for Mac/SGP_LIDAR_DATA/EXTEND_WSTATS_VAP/',sites{ss},'_CBLH.mat'));
+            load(strcat('lidar_data/SGP_LIDAR_DATA/EXTEND_WSTATS_VAP/',sites{ss},'_CBLH.mat'));
             WSTAR=Wstar_all;
             CBLH=Zi_all;
             CBLH(abs(gradient(CBLH))>700)=nan; %eliminate large jumps in the CBL depth (spurious features)
@@ -138,9 +143,9 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
             fileday=datenum(yyyy,month,day); %construct the fileday in matlab serial time
             filetime=datenum(yyyy,month,day,hour,0,0);
             cuidx=find(fileday==cudays_all);
-            %if fileday==datenum(2016,6,25);
-            if fileday>=datenum(2011,5,1) && ismember(fileday,cudays_all)%check to see if this day is in the list of cumulus days
-                %ncdisp(fname);
+            if fileday==datenum(2018,7,6);
+%             if fileday>=datenum(2011,5,1) && ismember(fileday,cudays_all)%check to see if this day is in the list of cumulus days
+%ncdisp(fname);
                 
                 if hour>=17 && hour<23 % only process data for hours where ShCu are likely and the CBL growth is less extreme
                     %hour
@@ -151,7 +156,7 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     WR=rangefilt(W,ones(5,5));%determine the range of data at every grid point using a 5x5 tile of points
                     W(WR>8)=nan; %eliminate points characterized by large noise
                     SNR=double(ncread(fname,'intensity')); %signal to noise ratio
-                    W(SNR<1.00)=nan; %remove W less than SNR
+                    W(SNR<1.01)=nan; %remove W less than SNR
                     W=wiener2(W,[3 3]); %this is a noise filter in a 3x3 domain to remove "speckling" the algorithm is based on the local variance and mean
                     %W(abs(W)>7)=nan;%range check
                     if str2double(target_year)<=2012
@@ -186,8 +191,8 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     %% find hourly-average CBL-averaged wind speed
                     if ~isempty(cblhnow) && ~isnan(cblhnow) %if the CBL height is defined
                         whidx=find(whgts<=cblhnow);
-                    else %if now CBL height is defined assume a CBL height of 1800 m
-                        whidx=find(whgts<=1800);
+                    else %if now CBL height is defined assume a CBL height of 1300 m
+                        whidx=find(whgts<=1300);
                     end
                     
                     wtidx=find(timemaster>=filetime & timemaster<(filetime+1/24)); %time index for the hour of interest
@@ -224,8 +229,8 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                         ylabel('Height [m]','fontsize',15,'fontweight','bold');
                         title(datestr(nanmean(time)));
                         sp2=subplot(2,1,2);
-                        rbm=rbmapper(5,-5);
-                        colormap(sp2,rbm);
+%                         rbm=rbmapper(5,-5);
+                        colormap(jet);
                         pcolor(time,hgts,medfilt2(W,[1 1]));shading flat; caxis([-3 3]);
                         hold on;
                         plot(timevec2(cblhidx),CBLH(cblhidx),'--k','linewidth',2);
@@ -268,8 +273,12 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
 %                         pcolor(time,hgts,Wmask);shading flat;
                     end
                     
-                    size_threshold=50;
-                    Wmaskfilt=bwareafilt(Wmask,[size_threshold inf]); %filter on an area of "size_threshold" pixels (what remains we will call "coherent" updrafts)
+                    horiz_threshold = round(100/speed_bar); %number of points to reach 100 meters based on the windspeed
+                    size_threshold=4*horiz_threshold; 
+                    upperbound=round(cblhnow/speed_bar)*4
+                    Wmaskfilt=bwareafilt(Wmask,[size_threshold upperbound]); %filter on an area of "size_threshold" pixels (what remains we will call "coherent" updrafts)
+                    %change infinite to a physically meaningful value
+                    %ex.width=3*BLH height=BLH (line273)
                     updrafts=bwlabel(Wmaskfilt); %label each independent connected updraft region
                     upfrac(cuidx,hour,:)=nansum(Wmaskfilt,2)./size(Wmaskfilt,2); %this is the coherent updraft fraction for the hour as a function of height
                     cblhr(cuidx,hour)=cblhnow; %this stores the CBL height for each hour
@@ -288,7 +297,7 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                         colormap(sp3,colorcube(200));
                         pcolor(time,hgts,updrafts(:,:));shading flat;%
                     end
-                    return
+                    
                     
                     %Parse out various properties
                     centers=[regions.Centroid];
