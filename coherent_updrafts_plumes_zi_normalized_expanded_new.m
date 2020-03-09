@@ -4,7 +4,7 @@ clear all
 
 daysec=24*60*60; %number of seconds in a day
 % load('~/Dropbox/MATLAB/Lidar_Codes/vert_vel_map'); %divergent colormap
-pflag=1; % flag to toggle plotting on/off on=1
+pflag=0; % flag to toggle plotting on/off on=1
 
 target_years={'2015' '2016'}; %select the year of data you want to process
 
@@ -40,10 +40,22 @@ upZi=nan(53727,1); %CBL height for each updraft.
 upxc=nan(53727,1); %updraft "x" center
 upzc=nan(53727,1); %updraft "z" center
 upzx=nan(53727,1); %updraft "z" corresponding to maximum updraft
+upzbot=nan(53727,1); %updraft bottom height 
 % wsnapshot=nan(53727,100,501); %this is for parsing out the updraft scene for each updraft
 Wnorm=nan(53727,61,161); %height/time normalized updraft scene
 CWIDTH=nan(53727,1); %updraft width matrix
 wxz34=nan(53727,1);%max updraft at the updraft 3/4 height
+z34=nan(53727,1); %3/4 height
+upwmax_top=nan(53727,1); %max updraft in the top quarter of updraft
+hgt_wmax=nan(53727,1);
+top_spd=nan(53727,1);
+bot_spd=nan(53727,1);
+theta_top=nan(53727,1);
+theta_bot=nan(53727,1);
+u_top=nan(53727,1);
+u_bot=nan(53727,1);
+v_top=nan(53727,1);
+v_bot=nan(53727,1);
 
 upctime2=nan(53727,1); %updraft center times
 updur2=nan(53727,1); %updraft duration
@@ -59,10 +71,22 @@ upZi2=nan(53727,1); %CBL height for each updraft.
 upxc2=nan(53727,1); %updraft "x" center
 upzc2=nan(53727,1); %updraft "z" center
 upzx2=nan(53727,1); %updraft "z" corresponding to maximum updraft
+upzbot2=nan(53727,1);
 % wsnapshot2=nan(53727,100,501); %this is for parsing out the updraft scene for each updraft
 Wnorm2=nan(53727,61,161); %height/time normalized updraft scene
 CWIDTH2=nan(53727,1); %updraft width matrix
 wxz342=nan(53727,1);%max updraft at the updraft 3/4 height
+z342=nan(53727,1); %3/4 height
+upwmax_top2=nan(53727,1); %max updraft in the top quarter of updraft
+hgt_wmax2=nan(53727,1);
+top_spd2=nan(53727,1);
+bot_spd2=nan(53727,1);
+theta_top2=nan(53727,1);
+theta_bot2=nan(53727,1);
+u_top2=nan(53727,1);
+u_bot2=nan(53727,1);
+v_top2=nan(53727,1);
+v_bot2=nan(53727,1);
 % % dnctime=nan(100000,1); %downdraft center times
 % % dndur=nan(100000,1); %downdraft duration
 % % dnchord=nan(100000,1); %downdraft chord length
@@ -78,7 +102,7 @@ wxz342=nan(53727,1);%max updraft at the updraft 3/4 height
 
 %% PROCESS LIDAR DATA
 
-for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
+for ss=1:length(sites)  % loop over the 5 lidar sites at SGP
     
     [upnum,upfrac,dnfrac,upflux,Wmax,Wmin]=deal(nan(length(cudays_all),24,320)); %initialize some matrices
     cblhr=nan(length(cudays_all),24);
@@ -143,8 +167,8 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
             fileday=datenum(yyyy,month,day); %construct the fileday in matlab serial time
             filetime=datenum(yyyy,month,day,hour,0,0);
             cuidx=find(fileday==cudays_all);
-            if fileday==datenum(2018,7,6);
-%             if fileday>=datenum(2011,5,1) && ismember(fileday,cudays_all)%check to see if this day is in the list of cumulus days
+%             if fileday==datenum(2016,6,15);
+            if fileday>=datenum(2011,5,1) && ismember(fileday,cudays_all)%check to see if this day is in the list of cumulus days
 %ncdisp(fname);
                 
                 if hour>=17 && hour<23 % only process data for hours where ShCu are likely and the CBL growth is less extreme
@@ -154,10 +178,10 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     W=double(ncread(fname,'radial_velocity')); %read the Line of Site velocity (aka vertical velocity)
                     %filter W using a range and/or standard deviation filter
                     WR=rangefilt(W,ones(5,5));%determine the range of data at every grid point using a 5x5 tile of points
-                    W(WR>8)=nan; %eliminate points characterized by large noise
+                    %W(WR>8)=nan; %eliminate points characterized by large noise
                     SNR=double(ncread(fname,'intensity')); %signal to noise ratio
-                    W(SNR<1.01)=nan; %remove W less than SNR
-                    W=wiener2(W,[3 3]); %this is a noise filter in a 3x3 domain to remove "speckling" the algorithm is based on the local variance and mean
+                    W(SNR<1.002)=nan; %remove W less than SNR
+                    W=medfilt2(W,[3 3]); %this is a noise filter in a 3x3 domain to remove "speckling" the algorithm is based on the local variance and mean
                     %W(abs(W)>7)=nan;%range check
                     if str2double(target_year)<=2012
                         time=ncread(fname,'time_offset');
@@ -197,8 +221,26 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     
                     wtidx=find(timemaster>=filetime & timemaster<(filetime+1/24)); %time index for the hour of interest
                     spdnow=wspdmaster(whidx,wtidx); %parse out the wind speeds
-                    spdbar=nanmean(spdnow(:)); %flatten and take the mean of all values... this is admittedly a bit course but still useful
+                    dirnow=wdmaster(whidx,wtidx);
                     
+                    if length(whidx)>=12 && ~isempty(wtidx)
+                    spdbar=nanmean(spdnow(:)); %flatten and take the mean of all values... this is admittedly a bit course but still useful
+             
+                    spdtop=nanmean(spdnow(end,:),2);
+                    spdbot=nanmean(spdnow(12,:),2);
+                    
+                    thetatop=nanmean(dirnow(end,:),2);
+                    thetabot=nanmean(dirnow(12,:),2);
+
+                    else 
+                        spdbar = nan;
+                        spdtop=nan;
+                        spdbot=nan;
+                        thetatop=nan;
+                        thetabot=nan;
+
+
+                    end
                     %### create a meshed time/height grid from the lidar range
                     %gates and time stamps
                     [tmat,hmat]=meshgrid(time,hgts);
@@ -264,8 +306,6 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     if pflag==1
                         figure(100);clf;
                         sp1=subplot(3,1,1);
-                        rbm=rbmapper(5,-5);
-                        colormap(sp1,rbm);
                         pcolor(time,hgts,medfilt2(W,[1 1]));shading flat; caxis([-3 3]);
                         hold on;
 %                         sp2=subplot(3,1,2);
@@ -273,10 +313,13 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
 %                         pcolor(time,hgts,Wmask);shading flat;
                     end
                     
-                    horiz_threshold = round(100/speed_bar); %number of points to reach 100 meters based on the windspeed
+                    horiz_threshold = round(100/spdbar); %number of points to reach 100 meters based on the windspeed
                     size_threshold=4*horiz_threshold; 
-                    upperbound=round(cblhnow/speed_bar)*4
-                    Wmaskfilt=bwareafilt(Wmask,[size_threshold upperbound]); %filter on an area of "size_threshold" pixels (what remains we will call "coherent" updrafts)
+                    upperbound=round(cblhnow/spdbar)*4;
+                    if isnan(spdbar)
+                        size_threshold=70;
+                    end
+                    Wmaskfilt=bwareafilt(Wmask,[size_threshold inf]); %filter on an area of "size_threshold" pixels (what remains we will call "coherent" updrafts)
                     %change infinite to a physically meaningful value
                     %ex.width=3*BLH height=BLH (line273)
                     updrafts=bwlabel(Wmaskfilt); %label each independent connected updraft region
@@ -288,7 +331,7 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                     % Leverage MATLAB regionprop algorithm to compute
                     % properties of each updraft object (kind of a black
                     % box)
-                    regions=regionprops(updrafts,'Area','Extrema','BoundingBox','Centroid','PixelList','PixelIdxList','Orientation','convexhull');
+                    regions=regionprops(updrafts,'Area','Extrema','BoundingBox','Centroid','PixelList','PixelIdxList','Orientation','convexhull','MajorAxisLength','MinorAxisLength');
                     
                     %## Optional plotting to show the unique updraft
                     %objects
@@ -312,16 +355,28 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                                     idxnow=regions(rr).PixelList; %list of pixels
                                     %scatter(idxnow(:,1),idxnow(:,2),'*k');
                                     %regions(rr).Wmax=nanmax(W(regions(rr).PixelIdxList));
-                                    upwmax(draft_count)=nanmax(W(regions(rr).PixelIdxList)); %find the maximum vertical velocity value in the updraft
+                                    [upwmax(draft_count),upidx]=nanmax(W(regions(rr).PixelIdxList)); %find the maximum vertical velocity value in the updraft
+                                    [upi,upj]=ind2sub(size(W),regions(rr).PixelIdxList(upidx));
+                                    hgt_wmax(draft_count)=hgts(upi);
                                     upwmean(draft_count)=nanmean(W(regions(rr).PixelIdxList)); %compute the mean vertical velocity in the updraft
                                     upwstar(draft_count)=wstarnow; %assign each updraft a convective velocity scale based on the hourly values computed previously (this is just for reference and mormalization and not a property of the updraft)
                                     upspd(draft_count)=spdbar; %mean CBL wind speed
+                                    top_spd(draft_count)=spdtop;
+                                    bot_spd(draft_count)=spdbot;
+                                    theta_top(draft_count)=thetatop;
+                                    theta_bot(draft_count)=thetabot;
+                                    u_top=top_spd.*cos(theta_top);
+                                    v_top=top_spd.*sin(theta_top);
+                                    u_bot=bot_spd.*cos(theta_bot);
+                                    v_bot=bot_spd.*sin(theta_bot);
                                     pixel_area=(spdbar*1).*mode(gradient(hgts));   %this is the "size" of a given pixek = speed*1 second (meters) x gate length (30 m)
                                     uparea(draft_count)=regions(rr).Area.*pixel_area; %the total updraft area is therefore the #of pixels (regions(rr).Area) multiplied by the "pixel size"
                                     upZi(draft_count)=cblhnow; % cbl height corresponding to each updraft (not locally computed).
                                     upz(draft_count)=hgts(round(regions(rr).Centroid(2))); %the height of the center of the updraft
                                     hold on;
                                     [ztop,zidx]=max(regions(rr).ConvexHull(:,2)); % ztop is the "pixel" top, but not in whole pixels... strange, but workable
+                                    [zbot,zidxn]=min(regions(rr).ConvexHull(:,2)); % ztop is the "pixel" top, but not in whole pixels... strange, but workable
+                                    
                                     zcenter=round(regions(rr).Centroid(2)); %must be rounded because it can be non integer number (whereas actual data is integer spacing)
                                     xcenter=round(regions(rr).Centroid(1));
                                     width=max(regions(rr).Extrema(:,1))-min(regions(rr).Extrema(:,1)); % maximum width (but not necessarily along a single height)
@@ -343,8 +398,10 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                                     upxc(draft_count)=LC+(RC-LC)/2;%xcenter; %xcenter of the updraft at 3/4 height
                                     upzc(draft_count)=hgts(zcenter); %zcenter of the updraft
                                     upzx(draft_count)=hgts(round(ztop)); %top of the updraft (x here indicates maximum height)
+                                    upzbot(draft_count)=hgts(round(zbot));
                                     upctime(draft_count)=time(round(upxc(draft_count)));
-                                    
+                                    z34(draft_count)=round((zcenter+ztop)/2); %three quarter height of the updraft
+                                    upwmax_top(draft_count)=nanmax(W(regions(rr).PixelIdxList(zpoints>=z34(draft_count))));
                                     %% normalized snap shot (normalized in time and in CBL height (Zi))
                                     if isfinite(CWIDTH(draft_count)) && CWIDTH(draft_count)>0
                                         zvec=(hgts(1:100));
@@ -383,6 +440,14 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                                     upwmean2(dcn)=nanmean(W(regions(rr).PixelIdxList)); %compute the mean vertical velocity in the updraft
                                     upwstar2(dcn)=wstarnow; %assign each updraft a convective velocity scale based on the hourly values computed previously (this is just for reference and mormalization and not a property of the updraft)
                                     upspd2(dcn)=spdbar; %mean CBL wind speed
+                                    top_spd2(dcn)=spdtop;
+                                    bot_spd2(dcn)=spdbot;
+                                    theta_top2(dcn)=thetatop;
+                                    theta_bot2(dcn)=thetabot;
+                                    u_top2=top_spd.*cos(theta_top2);
+                                    v_top2=top_spd.*sin(theta_top2);
+                                    u_bot2=bot_spd.*cos(theta_bot2);
+                                    v_bot2=bot_spd.*sin(theta_bot2);
                                     pixel_area=(spdbar*1).*mode(gradient(hgts));   %this is the "size" of a given pixek = speed*1 second (meters) x gate length (30 m)
                                     uparea2(dcn)=regions(rr).Area.*pixel_area; %the total updraft area is therefore the #of pixels (regions(rr).Area) multiplied by the "pixel size"
                                     upZi2(dcn)=cblhnow; % cbl height corresponding to each updraft (not locally computed).
@@ -410,8 +475,10 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
                                     upxc2(dcn)=LC+(RC-LC)/2;%xcenter; %xcenter of the updraft at 3/4 height
                                     upzc2(dcn)=hgts(zcenter); %zcenter of the updraft
                                     upzx2(dcn)=hgts(round(ztop)); %top of the updraft (x here indicates maximum height)
+                                    upzbot2(dcn)=hgts(round(zbot));
                                     upctime2(dcn)=time(round(upxc2(dcn)));
-
+                                    z342(dcn)=round((zcenter+ztop)/2); %three quarter height of the updraft
+                                    upwmax_top2(dcn)=nanmax(W(regions(rr).PixelIdxList(zpoints>=z342(dcn))));
                                     
                                     %% normalized snap shot (normalized in time and in CBL height (Zi))
                                     if isfinite(CWIDTH2(dcn)) && CWIDTH2(dcn)>0
@@ -455,22 +522,22 @@ for ss=5%1:length(sites)  % loop over the 5 lidar sites at SGP
         
     end %end year loop
 end
-return
+
 %%
 % save updraft object output data
-save('updraft_objects_20190227.mat','upzc','upzx','upxc','upZi','upctime','CWIDTH','upspd','upwmax','upwstar','upwmean','uparea','upzc2','upzx2','upxc2','upZi2','CWIDTH2','upspd2','upwmax2','upwstar2','upctime2','upwmean2','uparea2','xideal','zideal','-v7.3');
+save('updraft_objects_20190227.mat','u_top','u_bot','v_top','v_bot','u_top2','u_bot2','v_top2','v_bot2','z34','z342','upwmax_top','upwmax_top2','upzbot','upzc','upzx','upxc','upZi','upctime','CWIDTH','upspd','upwmax','upwstar','upwmean','uparea','upzbot2','upzc2','upzx2','upxc2','upZi2','CWIDTH2','upspd2','upwmax2','upwstar2','upctime2','upwmean2','uparea2','xideal','zideal','ximat','zimat','-v7.3');
 save('updraft_wnorm_20190227.mat','Wnorm','Wnorm2','xideal','zideal','-v7.3');
 
 %% Compute upper 3/4 updraft location
-upz_norm=(0.5.*(upzc+upzx))./upZi;
+upz_norm=(0.5.*(upzc+upzx))./upZi; %CBL height normalized 3/4 height. 
 upzxn=upzx./upZi;
 upz_norm2=(0.5.*(upzc2+upzx2))./upZi2;
 upzxn2=upzx2./upZi2;
-qtiles=[.25 .45 .65 .85 1.05 1.25]
+qtiles=[.25 .45 .65 .85 1.05 1.25] %normalized CBL height bins
 
 for ii=1:(length(qtiles)-1)
     if ii<length(qtiles)
-        idx(ii).locs=find(upz_norm>=qtiles(ii) & upz_norm<qtiles(ii+1));
+        idx(ii).locs=find(upz_norm>=qtiles(ii) & upz_norm<qtiles(ii+1)); %indices for updrafts in a given height range (e.g., between .25 and .45 Zi)
         idx2(ii).locs=find(upz_norm2>=qtiles(ii) & upz_norm2<qtiles(ii+1));
     end
 end
@@ -500,8 +567,8 @@ for ii=1:(length(qtiles)-1)
         ylabel('Prob.');
     end
     xlabel('Chord Length [m]');
-    text(800,.3,strcat('Mean=',num2str(mchord(ii))),'fontsize',12,'fontweight','bold');
-    text(800,.25,strcat('Median=',num2str(mdchord(ii))),'fontsize',12,'fontweight','bold');
+    text(800,.3,strcat('Mean=',num2str(mchord(ii))),'fontsize',17,'fontweight','bold');
+    text(800,.25,strcat('Median=',num2str(mdchord(ii))),'fontsize',17,'fontweight','bold');
     set(gca,'fontsize',12,'fontweight','bold','linewidth',2,'layer','top');
     
     sp=subplot(3,length(qtiles)-1,2*(length(qtiles)-1)+ii);
@@ -522,8 +589,8 @@ for ii=1:(length(qtiles)-1)
         ylabel('Prob.');
     end
     xlabel('max updraft [m s^{-1}]');
-    text(1,.35,strcat('Mean=',num2str(WM(ii))),'fontsize',12,'fontweight','bold');
-    text(1,.3,strcat('Median=',num2str(WMD(ii))),'fontsize',12,'fontweight','bold');
+    text(1,.35,strcat('Mean=',num2str(WM(ii))),'fontsize',17,'fontweight','bold');
+    text(1,.3,strcat('Median=',num2str(WMD(ii))),'fontsize',17,'fontweight','bold');
     set(gca,'fontsize',12,'fontweight','bold','linewidth',2,'layer','top');
 end
 
@@ -531,14 +598,14 @@ end
 for ii=1:length(qtiles)-1
     figure(3);
     idxnow=[idx(ii).locs; idx2(ii).locs+53727];
-    cmap=rbmapper_coarse(1.25,-.3);
-    colormap(cmap);
+%     cmap=rbmapper_coarse(1.25,-.3);
+    colormap(jet(12));
     subplot(3,length(qtiles)-1,ii);
     WBAR1=squeeze(nanmean(Wnorm(idx(ii).locs,:,:),1));
     WBAR2=squeeze(nanmean(Wnorm2(idx2(ii).locs,:,:),1))
     WBAR=(WBAR1+WBAR2)./2;
-%     pcolor(ximat.*mdchord(ii)/2,zimat,WBAR);shading flat; caxis([-.3 1.25]);
-    contourf(ximat.*mdchord(ii)/2,zimat,WBAR,[-5:.1:5],'linestyle','none');shading flat; caxis([-.3 1.25]);
+    pcolor(ximat.*mdchord(ii)/2,zimat,WBAR);shading flat; caxis([-.3 1.25]);
+    %contourf(ximat.*mdchord(ii)/2,zimat,WBAR,(-5:.1:5),'linestyle','none');shading flat; caxis([-.3 1.25]);
 
     hold on;
     %     contour(ximat.*mdchord(ii)/2,zimat,squeeze(nanmean(Wnorm(idx(ii).locs,:,:),1)),[0.5 .5],'k');shading flat; caxis([-.5 1.5]);
@@ -547,7 +614,7 @@ for ii=1:length(qtiles)-1
     %         xlim([-2 2]);
     xlim([-150 150])
     grid on; box on; set(gca,'linewidth',2,'layer','top');
-    text(-140,1.3,strcat('N=',num2str(length(idxnow))),'fontsize',15,'fontweight','bold')
+    text(-140,1.3,strcat('N=',num2str(length(idxnow))),'fontsize',17,'fontweight','bold','color',[0.9290 0.6940 0.1250])
         set(gca,'fontsize',12,'fontweight','bold','linewidth',2,'layer','top');
 
 end
